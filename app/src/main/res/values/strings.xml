@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Nicolas</string>
+    <string name="take_photo">Take photo</string>
+    <string name="need_camera_permission">This app requires an access to camera to work. Would you grant such permission?</string>
+    <string name="need_audio_permission">This app requires an access to record audio to work. Would you grant such permission?</string>
+    <string name="need_permissions">This app requires the following permissions:\n%1$s.\nWould you grant such permissions?</string>
+    <string name="permission_camera">Camera</string>
+    <string name="permission_record_audio">Record audio</string>
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+</resources>
