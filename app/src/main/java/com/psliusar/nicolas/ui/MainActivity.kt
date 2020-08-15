@@ -8,6 +8,7 @@ import androidx.core.view.ViewCompat
 import androidx.fragment.app.Fragment
 import com.psliusar.nicolas.R
 import com.psliusar.nicolas.ui.camera.CameraFragment
+import com.psliusar.nicolas.ui.home.HomeFragment
 import com.psliusar.nicolas.utils.Permissioner
 import com.psliusar.nicolas.utils.Permissionist
 import com.psliusar.nicolas.utils.SingleModelFactory
@@ -41,17 +42,21 @@ class MainActivity : AppCompatActivity(), Permissionist {
             insets
         }
 
-        if (supportFragmentManager.findFragmentById(R.id.container) == null) {
-            showFragment(CameraFragment())
+        if (savedInstanceState == null) {
+            // First run, show the menu
+            supportFragmentManager
+                .beginTransaction()
+                .add(R.id.container, HomeFragment())
+                .commit()
         }
     }
 
-    private fun showFragment(fragment: Fragment) {
+    fun showFragment(fragment: Fragment) {
         val manager = supportFragmentManager
         manager
             .beginTransaction()
             .replace(R.id.container, fragment)
-            .apply { if (manager.findFragmentById(R.id.container) != null) addToBackStack(null) }
+            .addToBackStack(null)
             .commit()
     }
 

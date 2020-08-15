@@ -35,14 +35,12 @@ class MainViewModel(private val context: Context) : ViewModel() {
 
         return when {
             permissions.contains(Manifest.permission.CAMERA) -> R.string.need_camera_permission
-            permissions.contains(Manifest.permission.RECORD_AUDIO) -> R.string.need_audio_permission
             else -> null
         }?.let(context::getString)
     }
 
     private fun getPermissionName(permission: String): String? = when (permission) {
         Manifest.permission.CAMERA -> R.string.permission_camera
-        Manifest.permission.RECORD_AUDIO -> R.string.permission_record_audio
         else -> null
     }?.let(context::getString)
 

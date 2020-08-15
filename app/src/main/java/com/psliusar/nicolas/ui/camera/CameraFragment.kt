@@ -1,30 +1,29 @@
 package com.psliusar.nicolas.ui.camera
 
+import android.os.AsyncTask
 import android.os.Bundle
 import android.util.Log
-import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Observer
 import com.psliusar.nicolas.R
+import com.psliusar.nicolas.camera.LuminosityAnalyzer
 import com.psliusar.nicolas.ui.MainViewModel
 import com.psliusar.nicolas.utils.Permissionist
 import com.psliusar.nicolas.utils.SingleModelFactory
+import com.psliusar.nicolas.utils.initCamera
 import com.psliusar.nicolas.utils.requireParent
 import com.psliusar.nicolas.utils.simulateClick
 import kotlinx.android.synthetic.main.fragment_camera.*
-import java.util.concurrent.ExecutionException
 
-private const val TAG = "NicolasCamera"
+private const val TAG = "CameraFragment"
 
-class CameraFragment : Fragment() {
+class CameraFragment : Fragment(R.layout.fragment_camera) {
 
     private lateinit var mainViewModel: MainViewModel
     private lateinit var viewModel: CameraViewModel
@@ -45,12 +44,6 @@ class CameraFragment : Fragment() {
             requireActivity().finishAfterTransition()
         })
     }
-
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        state: Bundle?
-    ): View? = inflater.inflate(R.layout.fragment_camera, container, false)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -75,34 +68,40 @@ class CameraFragment : Fragment() {
     }
 
     private fun startCamera() {
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext())
-        cameraProviderFuture.addListener(Runnable {
-            val cameraProvider = try {
-                cameraProviderFuture.get()
-            } catch (e: ExecutionException) {
-                throw IllegalStateException("Camera initialization failed.", e.cause!!)
-            }
-            // Build and bind the camera use cases
-            bindCameraUseCases(cameraProvider)
-        }, ContextCompat.getMainExecutor(requireContext()))
+        initCamera(requireContext()) {
+            bindCameraUseCases(it)
+        }
     }
 
     private fun bindCameraUseCases(cameraProvider: ProcessCameraProvider) {
-        val factory = viewModel.getUseCaseFactory()
+        // Create configuration object for the viewfinder use case
+        previewUseCase = Preview.Builder()
+            .build()
+            .also {
+                it.setSurfaceProvider(viewFinder.createSurfaceProvider())
+            }
 
-        previewUseCase = factory.getPreviewUseCase(viewFinder)
-
-        captureUseCase = factory.getCaptureUseCase()
+        captureUseCase = ImageCapture.Builder()
+            // We don't set a resolution for image capture; instead, we
+            // select a capture mode which will infer the appropriate
+            // resolution based on aspect ration and requested mode
+            .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+            .build()
         shutter.setOnClickListener {
             viewModel.takePicture(captureUseCase)
         }
 
-        val analyzer = factory.createLuminosityAnalyzer().apply {
+        val analyzer = LuminosityAnalyzer().apply {
             addListener {
                 Log.d(TAG, "Average luminosity: $it. Frames per second: ${"%.01f".format(framesPerSecond)}")
             }
         }
-        analysisUseCase = factory.getAnalyzerUseCase(analyzer)
+        analysisUseCase = ImageAnalysis.Builder()
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .build()
+            .also {
+                it.setAnalyzer(AsyncTask.THREAD_POOL_EXECUTOR, analyzer)
+            }
 
         try {
             // Unbind use cases before rebinding

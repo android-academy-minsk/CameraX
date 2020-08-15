@@ -1,6 +1,5 @@
 package com.psliusar.nicolas.ui.camera
 
-import android.Manifest
 import android.content.Context
 import android.util.Log
 import android.widget.Toast
@@ -14,26 +13,23 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.OnLifecycleEvent
 import androidx.lifecycle.ViewModel
-import com.psliusar.nicolas.utils.PermissionDeniedException
 import com.psliusar.nicolas.utils.Permissioner
 import com.psliusar.nicolas.utils.SingleLiveEvent
-import io.reactivex.android.schedulers.AndroidSchedulers
+import com.psliusar.nicolas.utils.waitForCameraPermission
 import io.reactivex.disposables.CompositeDisposable
 import java.io.File
 
-private const val TAG = "CameraXApp"
+private const val TAG = "CameraViewModel"
 
 class CameraViewModel(
     private val context: Context
 ) : ViewModel(), LifecycleObserver {
 
-    val startCamera: LiveData<Unit>
-        get() = _startCamera
     private val _startCamera = SingleLiveEvent<Unit>()
+    val startCamera: LiveData<Unit> = _startCamera
 
-    val quit: LiveData<Unit>
-        get() = _quit
     private val _quit = SingleLiveEvent<Unit>()
+    val quit: LiveData<Unit> = _quit
 
     private val _lensFacing = MutableLiveData(CameraSelector.LENS_FACING_BACK)
     val lensFacing: LiveData<Int> = _lensFacing
@@ -46,22 +42,12 @@ class CameraViewModel(
     }
 
     fun init(permissioner: Permissioner) {
-        permissioner
-            .need(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
-            .observeOn(AndroidSchedulers.mainThread())
-            .subscribe({
-                _startCamera.call()
-            }, {
-                when (it) {
-                    is PermissionDeniedException -> {
-                        Toast.makeText(context, "Required permissions not granted.", Toast.LENGTH_SHORT).show()
-                        Log.d(TAG, "Permissions not granted by the user: $it")
-                        _quit.call()
-                    }
-                    else -> throw RuntimeException("Unable to get permissions for camera", it)
-                }
-            })
-            .let(disposables::add)
+        waitForCameraPermission(
+            context,
+            permissioner,
+            { _startCamera.call() },
+            { _quit.call() }
+        ).let(disposables::add)
     }
 
     fun takePicture(imageCapture: ImageCapture) {
@@ -103,10 +89,6 @@ class CameraViewModel(
             CameraSelector.LENS_FACING_BACK -> CameraSelector.LENS_FACING_FRONT
             else -> throw IllegalStateException("Unexpected state, lensFacing=${_lensFacing.value}")
         }
-    }
-
-    fun getUseCaseFactory(): UseCaseFactory {
-        return UseCaseFactory()
     }
 
     /** Use external media if it is available, our app's file directory otherwise */
