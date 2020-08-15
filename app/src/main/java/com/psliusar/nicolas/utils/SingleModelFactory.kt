@@ -1,11 +1,9 @@
 package com.psliusar.nicolas.utils
 
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelProviders
-import java.lang.IllegalStateException
+import androidx.lifecycle.ViewModelStoreOwner
 
 class SingleModelFactory<M : ViewModel>(
     private val singleClass: Class<M>,
@@ -15,21 +13,13 @@ class SingleModelFactory<M : ViewModel>(
     companion object {
 
         inline fun <reified M : ViewModel> getFromActivity(fragment: Fragment): M =
-            get(fragment.requireActivity(), M::class.java) {
+            get(fragment.requireActivity() as ViewModelStoreOwner) {
                 throw IllegalStateException("ViewModel must be instantiated already")
+                null as M
             }
 
-        inline fun <reified M : ViewModel> get(activity: FragmentActivity, noinline creator: () -> M): M =
-            get(activity, M::class.java, creator)
-
-        fun <M : ViewModel> get(activity: FragmentActivity, singleClass: Class<M>, creator: () -> M): M =
-            ViewModelProviders.of(activity, SingleModelFactory(singleClass, creator)).get(singleClass)
-
-        inline fun <reified M : ViewModel> get(fragment: Fragment, noinline creator: () -> M): M =
-            get(fragment, M::class.java, creator)
-
-        fun <M : ViewModel> get(fragment: Fragment, singleClass: Class<M>, creator: () -> M): M =
-            ViewModelProviders.of(fragment, SingleModelFactory(singleClass, creator)).get(singleClass)
+        inline fun <reified M : ViewModel> get(storeOwner: ViewModelStoreOwner, noinline creator: () -> M): M =
+            ViewModelProvider(storeOwner, SingleModelFactory(M::class.java, creator)).get(M::class.java)
     }
 
     override fun <T : ViewModel> create(modelClass: Class<T>): T {

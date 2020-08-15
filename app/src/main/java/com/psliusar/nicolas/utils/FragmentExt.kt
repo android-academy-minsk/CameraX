@@ -2,14 +2,10 @@ package com.psliusar.nicolas.utils
 
 import androidx.fragment.app.Fragment
 
-inline fun <reified T> Fragment.requireParent() = getParent(T::class.java)
-
-fun <T> Fragment.getParent(host: Class<T>): T {
-    return optParent(host)
+inline fun <reified T> Fragment.requireParent(): T {
+    return optParent(T::class.java)
         ?: throw IllegalArgumentException("Unable to resolve interface $host")
 }
-
-inline fun <reified T> Fragment.optParent() = optParent(T::class.java)
 
 fun <T> Fragment.optParent(host: Class<T>): T? {
     var parent: Fragment? = parentFragment

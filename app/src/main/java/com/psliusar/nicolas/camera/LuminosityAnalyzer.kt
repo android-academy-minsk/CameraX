@@ -35,7 +35,7 @@ class LuminosityAnalyzer : ImageAnalysis.Analyzer {
         return data // Return the byte array
     }
 
-    override fun analyze(image: ImageProxy, rotationDegrees: Int) {
+    override fun analyze(image: ImageProxy) {
         // If there are no listeners attached, we don't need to perform analysis
         if (listeners.isEmpty()) return
 
@@ -64,5 +64,7 @@ class LuminosityAnalyzer : ImageAnalysis.Analyzer {
             // Update timestamp of last analyzed frame
             lastAnalyzedTimestamp = frameTimestamps.first
         }
+
+        image.close()
     }
 }

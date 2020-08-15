@@ -5,10 +5,12 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import androidx.camera.core.CameraX
+import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Observer
 import com.psliusar.nicolas.R
@@ -18,6 +20,7 @@ import com.psliusar.nicolas.utils.SingleModelFactory
 import com.psliusar.nicolas.utils.requireParent
 import com.psliusar.nicolas.utils.simulateClick
 import kotlinx.android.synthetic.main.fragment_camera.*
+import java.util.concurrent.ExecutionException
 
 private const val TAG = "NicolasCamera"
 
@@ -52,15 +55,8 @@ class CameraFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // Every time the provided texture view changes, recompute layout
-        viewFinder.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            updateTransform()
-        }
-
         switchCamera.setOnClickListener {
-            if (viewModel.switchToNextLensFacing()) {
-                startCamera()
-            }
+            viewModel.switchToNextLensFacing()
         }
 
         viewModel.startCamera.observe(viewLifecycleOwner, Observer {
@@ -68,24 +64,35 @@ class CameraFragment : Fragment() {
         })
 
         mainViewModel = SingleModelFactory.getFromActivity(this)
-        mainViewModel.onKeyDown(MainViewModel.KeyCode.SHUTTER).observe(this, Observer {
+        mainViewModel.onKeyDown(MainViewModel.KeyCode.SHUTTER).observe(viewLifecycleOwner, Observer {
             shutter.simulateClick()
+        })
+        viewModel.lensFacing.observe(viewLifecycleOwner, Observer {
+            startCamera()
         })
 
         viewModel.init(requireParent<Permissionist>().permissioner)
     }
 
     private fun startCamera() {
-        CameraX.unbindAll()
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext())
+        cameraProviderFuture.addListener(Runnable {
+            val cameraProvider = try {
+                cameraProviderFuture.get()
+            } catch (e: ExecutionException) {
+                throw IllegalStateException("Camera initialization failed.", e.cause!!)
+            }
+            // Build and bind the camera use cases
+            bindCameraUseCases(cameraProvider)
+        }, ContextCompat.getMainExecutor(requireContext()))
+    }
 
+    private fun bindCameraUseCases(cameraProvider: ProcessCameraProvider) {
         val factory = viewModel.getUseCaseFactory()
-        val lensFacing = viewModel.lensFacing
 
-        previewUseCase = factory.getPreviewUseCase(viewFinder, lensFacing) {
-            updateTransform()
-        }
+        previewUseCase = factory.getPreviewUseCase(viewFinder)
 
-        captureUseCase = factory.getCaptureUseCase(lensFacing)
+        captureUseCase = factory.getCaptureUseCase()
         shutter.setOnClickListener {
             viewModel.takePicture(captureUseCase)
         }
@@ -95,19 +102,22 @@ class CameraFragment : Fragment() {
                 Log.d(TAG, "Average luminosity: $it. Frames per second: ${"%.01f".format(framesPerSecond)}")
             }
         }
-        analysisUseCase = factory.getAnalyzerUseCase(analyzer, lensFacing)
+        analysisUseCase = factory.getAnalyzerUseCase(analyzer)
 
-        // Bind use cases to lifecycle
-        CameraX.bindToLifecycle(
-            viewLifecycleOwner,
-            previewUseCase,
-            captureUseCase,
-            analysisUseCase
-        )
-    }
+        try {
+            // Unbind use cases before rebinding
+            cameraProvider.unbindAll()
 
-    private fun updateTransform() {
-        viewModel.getViewFinderTransformationMatrix(viewFinder)
-            ?.let(viewFinder::setTransform)
+            // Bind use cases to lifecycle
+            val camera = cameraProvider.bindToLifecycle(
+                viewLifecycleOwner,
+                CameraSelector.Builder().requireLensFacing(viewModel.lensFacing.value!!).build(),
+                previewUseCase,
+                captureUseCase,
+                analysisUseCase
+            )
+        } catch (exc: IllegalStateException) {
+            Log.e(TAG, "Use case binding failed. This must be running on main thread.", exc)
+        }
     }
 }

@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.KeyEvent
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
 import androidx.fragment.app.Fragment
 import com.psliusar.nicolas.R
 import com.psliusar.nicolas.ui.camera.CameraFragment
@@ -34,6 +35,11 @@ class MainActivity : AppCompatActivity(), Permissionist {
 
         setContentView(R.layout.activity_main)
         setSupportActionBar(toolbar)
+
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            toolbar.setPaddingRelative(0, insets.systemWindowInsetTop, 0, 0)
+            insets
+        }
 
         if (supportFragmentManager.findFragmentById(R.id.container) == null) {
             showFragment(CameraFragment())

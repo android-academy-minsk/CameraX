@@ -1,18 +1,17 @@
 package com.psliusar.nicolas.ui.camera
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Matrix
 import android.util.Log
-import android.view.Surface
-import android.view.View
 import android.widget.Toast
-import androidx.camera.core.CameraX
+import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleObserver
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.OnLifecycleEvent
 import androidx.lifecycle.ViewModel
 import com.psliusar.nicolas.utils.PermissionDeniedException
@@ -36,8 +35,8 @@ class CameraViewModel(
         get() = _quit
     private val _quit = SingleLiveEvent<Unit>()
 
-    var lensFacing = CameraX.LensFacing.BACK
-        private set
+    private val _lensFacing = MutableLiveData(CameraSelector.LENS_FACING_BACK)
+    val lensFacing: LiveData<Int> = _lensFacing
 
     private val disposables = CompositeDisposable()
 
@@ -65,63 +64,44 @@ class CameraViewModel(
             .let(disposables::add)
     }
 
-    fun getViewFinderTransformationMatrix(viewFinder: View): Matrix? {
-        val matrix = Matrix()
-
-        // Compute the center of the view finder
-        val centerX = viewFinder.width / 2f
-        val centerY = viewFinder.height / 2f
-
-        // Correct preview output to account for display rotation
-        val rotationDegrees = when (viewFinder.display.rotation) {
-            Surface.ROTATION_0 -> 0f
-            Surface.ROTATION_90 -> 90f
-            Surface.ROTATION_180 -> 180f
-            Surface.ROTATION_270 -> 270f
-            else -> return null
-        }
-        matrix.postRotate(-rotationDegrees, centerX, centerY)
-
-        return matrix
-    }
-
     fun takePicture(imageCapture: ImageCapture) {
+        val file = File(getOutputDirectory(), "${System.currentTimeMillis()}.jpg")
+        // Create output options object which contains file + metadata
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(file).build()
+        // Set up image capture listener, which is triggered after photo has been taken
         imageCapture.takePicture(
-            File(getOutputDirectory(), "${System.currentTimeMillis()}.jpg"),
-            object : ImageCapture.OnImageSavedListener {
-                override fun onImageSaved(file: File) {
+            outputOptions,
+            ContextCompat.getMainExecutor(context),
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
                     val msg = "Photo capture succeeded: ${file.absolutePath}"
                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                     Log.d(TAG, msg)
                 }
 
-                override fun onError(error: ImageCapture.UseCaseError, message: String, exc: Throwable?) {
-                    val reason = when (error) {
-                        ImageCapture.UseCaseError.UNKNOWN_ERROR -> "unknown error"
-                        ImageCapture.UseCaseError.FILE_IO_ERROR -> "unable to save file"
+                override fun onError(exception: ImageCaptureException) {
+                    val reason = when (exception.imageCaptureError) {
+                        ImageCapture.ERROR_UNKNOWN -> "unknown error"
+                        ImageCapture.ERROR_FILE_IO -> "unable to save file"
+                        ImageCapture.ERROR_CAPTURE_FAILED -> "capture failed"
+                        ImageCapture.ERROR_CAMERA_CLOSED -> "camera closed"
+                        ImageCapture.ERROR_INVALID_CAMERA -> "invalid camera"
+                        else -> "unknown error"
                     }
                     val msg = "Photo capture failed: $reason"
                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                     Log.e(TAG, msg)
-                    exc?.printStackTrace()
+                    exception.printStackTrace()
                 }
             }
         )
     }
 
-    @SuppressLint("RestrictedApi")
-    fun switchToNextLensFacing(): Boolean {
-        val switchTo = when (lensFacing) {
-            CameraX.LensFacing.FRONT -> CameraX.LensFacing.BACK
-            CameraX.LensFacing.BACK -> CameraX.LensFacing.FRONT
-        }
-        return try {
-            // Only bind use cases if we can query a camera with this orientation
-            CameraX.getCameraWithLensFacing(switchTo)
-            lensFacing = switchTo
-            true
-        } catch (exc: Exception) {
-            false
+    fun switchToNextLensFacing() {
+        _lensFacing.value = when (_lensFacing.value) {
+            CameraSelector.LENS_FACING_FRONT -> CameraSelector.LENS_FACING_BACK
+            CameraSelector.LENS_FACING_BACK -> CameraSelector.LENS_FACING_FRONT
+            else -> throw IllegalStateException("Unexpected state, lensFacing=${_lensFacing.value}")
         }
     }
 
